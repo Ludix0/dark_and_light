@@ -1,0 +1,248 @@
+services:
+  dark_and_light:
+    build: .
+    image: ludix0/dark_and_light:latest
+    container_name: dark_and_light
+    restart: unless-stopped
+    # Laisse le temps au serveur de s'arrêter après SIGTERM
+    # (doit rester supérieur à SHUTDOWN_TIMEOUT).
+    stop_grace_period: 90s
+    volumes:
+      # Fichiers du serveur (~15 Go, installés/mis à jour par SteamCMD)
+      - ${HOME}/volumes/dark_and_light/filesServer:/home/steam/dnl_server
+      # Sauvegardes, GameUserSettings.ini, logs : volume distinct monté DANS le
+      # dossier du serveur (le jeu n'accepte pas d'emplacement externe)
+      - ${HOME}/volumes/dark_and_light/saves:/home/steam/dnl_server/DNL/Saved
+      # Préfixe Wine (runtimes Visual C++) : préparé une seule fois
+      - ${HOME}/volumes/dark_and_light/wineprefix:/home/steam/wineprefix
+      # SteamCMD partagé avec les autres serveurs de jeu
+      - ${HOME}/volumes/steamcmd:/home/steam/steamcmd
+    environment:
+      # ════════════════════════════════════════════════════════════════════
+      # CONTENEUR
+      # ════════════════════════════════════════════════════════════════════
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      # Valeur fixe propre à ce projet (pas dans le fichier partagé)
+      - UPDATE_ON_START=true
+      # Secondes laissées au serveur pour s'arrêter proprement
+      - SHUTDOWN_TIMEOUT=60
+      # Les rapports de plantage (un par arrêt, défaut connu du jeu) plus vieux
+      # que ce nombre de jours sont supprimés à chaque démarrage
+      - CRASH_REPORT_DAYS=7
+      # Connexion SteamCMD anonyme (suffit pour ce serveur)
+      - STEAM_USER=
+      - STEAM_PASSWORD=
+
+      # ════════════════════════════════════════════════════════════════════
+      # LANCEMENT
+      # ════════════════════════════════════════════════════════════════════
+      # Carte : TheSacredPath (Cap du Chemin sacré, défaut) ou TheShard
+      # (ou un chemin complet /Game/... pour une carte de mod)
+      - MAP=TheSacredPath
+      # Ports DANS le conteneur — garder les ports officiels (voir "ports:")
+      - GAME_PORT=7777
+      - QUERY_PORT=${steamQuery}
+      - RCON_PORT=${rcon}
+      # Adresse d'écoute
+      - MULTIHOME=0.0.0.0
+      # Options "?Clé=Valeur" ajoutées à la ligne de lancement (sans le 1er "?")
+      # ex : GameModIds=123456,789012
+      - EXTRA_URL_OPTIONS=
+      # Arguments "-xxx" ajoutés en fin de ligne de lancement
+      # ex : -automanagedmods -ForceAllowCaveFlyers
+      - EXTRA_ARGS=
+
+      # ════════════════════════════════════════════════════════════════════
+      # GameUserSettings.ini — section [ServerSettings]
+      # Toute variable DNL_<Clé> est écrite telle quelle : DNL_XPMultiplier=2
+      # devient XPMultiplier=2. Vous pouvez en ajouter d'autres sur ce modèle.
+      # VALEUR VIDE = le fichier n'est pas modifié (valeur par défaut du jeu).
+      # Booléens : True / False.
+      # ════════════════════════════════════════════════════════════════════
+
+      # ── Identité et accès (réglages confirmés pour Dark and Light) ───────
+      # Pas d'espace dans le nom (sinon le serveur peut ne pas apparaître)
+      - DNL_SessionName=Ludix_DarkAndLight_FR
+      - DNL_MaxPlayers=${maxPlayers}
+      # Mot de passe pour rejoindre (communauté : 5+ caractères, en MAJUSCULES)
+      - DNL_ServerPassword=${password}
+      # Mot de passe admin (console : EnableCheats <mot de passe>)
+      - DNL_ServerAdminPassword=${adminPassword}
+      # Mot de passe spectateur
+      - DNL_SpectatorPassword=
+
+      # ── Administration à distance (RCON) ─────────────────────────────────
+      # Toujours actif dans le conteneur (start_server.sh l'impose : il sert à
+      # sauvegarder puis fermer le jeu à l'arrêt). Mot de passe = mot de passe
+      # admin. Le port n'est pas publié (voir « ports » plus bas).
+      - DNL_RCONServerGameLogBuffer=
+      # Journalise les commandes admin dans le chat/les logs
+      - DNL_AdminLogging=
+
+      # ── Mode de jeu (confirmés) ──────────────────────────────────────────
+      # True = PvE, False = PvP
+      - DNL_ServerPVE=True
+      # Mode hardcore (mort = retour au niveau 1)
+      - DNL_ServerHardcore=False
+      # Difficulté (1.0 = défaut)
+      - DNL_DifficultyOffset=1.0
+      # Sauvegarde automatique (minutes) — trop bas = latence
+      - DNL_AutoSavePeriodMinutes=15
+      # Expulse les joueurs inactifs après N secondes
+      - DNL_KickIdlePlayersPeriod=3600
+
+      # ── Interface et affichage (confirmés) ───────────────────────────────
+      - DNL_ServerCrosshair=True
+      # True = supprime tout le HUD
+      - DNL_ServerForceNoHUD=False
+      - DNL_ShowMapPlayerLocation=True
+      - DNL_AllowThirdPersonPlayer=True
+      # Empêche de modifier le gamma en PvE / l'autorise en PvP
+      - DNL_DisablePvEGamma=False
+      - DNL_EnablePvPGamma=False
+
+      # ── Chat et notifications (confirmés) ────────────────────────────────
+      - DNL_GlobalVoiceChat=False
+      - DNL_ProximityChat=False
+      - DNL_AlwaysNotifyPlayerLeft=False
+      - DNL_DontAlwaysNotifyPlayerJoined=False
+
+      # ── Progression et récolte (confirmés) ───────────────────────────────
+      - DNL_XPMultiplier=1.0
+      - DNL_TamingSpeedMultiplier=1.0
+      - DNL_HarvestAmountMultiplier=1.0
+
+      # ── Cycle jour/nuit (confirmés) ──────────────────────────────────────
+      - DNL_DayCycleSpeedScale=1.0
+      - DNL_NightTimeSpeedScale=1.0
+
+      # ── Structures (confirmés) ───────────────────────────────────────────
+      - DNL_NewMaxStructuresInRange=6000
+      - DNL_DisableStructureDecayPvE=False
+      - DNL_ForceAllStructureLocking=False
+
+      # ── Créatures (confirmés) ────────────────────────────────────────────
+      - DNL_MaxTamedDinos=5000
+      # Autorise les montures volantes à porter joueurs/créatures en PvE
+      - DNL_AllowFlyerCarryPvE=True
+      # Vitesse de disparition des créatures apprivoisées abandonnées (PvE)
+      - DNL_PvEDinoDecayPeriodMultiplier=
+
+      # ── Transferts ───────────────────────────────────────────────────────
+      - DNL_NoTributeDownloads=False
+      - DNL_PreventDownloadSurvivors=
+      - DNL_PreventDownloadItems=
+      - DNL_PreventDownloadDinos=
+
+      # ════════════════════════════════════════════════════════════════════
+      # Réglages HÉRITÉS D'ARK (même moteur). Non documentés officiellement
+      # pour Dark and Light : laissés VIDES (= non écrits). Les renseigner pour
+      # les essayer, puis vérifier leur effet en jeu. Une clé inconnue est
+      # simplement ignorée par le serveur.
+      # ════════════════════════════════════════════════════════════════════
+
+      # ── Temps ────────────────────────────────────────────────────────────
+      - DNL_DayTimeSpeedScale=
+      # Heure de départ (-1 = aléatoire)
+      - DNL_StartTimeHour=
+
+      # ── Difficulté ───────────────────────────────────────────────────────
+      - DNL_OverrideOfficialDifficulty=
+
+      # ── Dégâts et résistances ────────────────────────────────────────────
+      - DNL_PlayerDamageMultiplier=
+      - DNL_PlayerResistanceMultiplier=
+      - DNL_DinoDamageMultiplier=
+      - DNL_DinoResistanceMultiplier=
+      - DNL_StructureDamageMultiplier=
+      - DNL_StructureResistanceMultiplier=
+      - DNL_ShowFloatingDamageText=
+      - DNL_AllowHitMarkers=
+
+      # ── Survie du joueur ─────────────────────────────────────────────────
+      - DNL_PlayerCharacterFoodDrainMultiplier=
+      - DNL_PlayerCharacterWaterDrainMultiplier=
+      - DNL_PlayerCharacterStaminaDrainMultiplier=
+      - DNL_PlayerCharacterHealthRecoveryMultiplier=
+      - DNL_OxygenSwimSpeedStatMultiplier=
+
+      # ── Créatures ────────────────────────────────────────────────────────
+      - DNL_DinoCountMultiplier=
+      - DNL_DinoCharacterFoodDrainMultiplier=
+      - DNL_DinoCharacterStaminaDrainMultiplier=
+      - DNL_DinoCharacterHealthRecoveryMultiplier=
+      - DNL_DisableDinoDecayPvE=
+      - DNL_AutoDestroyDecayedDinos=
+      - DNL_ServerAutoForceRespawnWildDinosInterval=
+      - DNL_AllowRaidDinoFeeding=
+      - DNL_RaidDinoCharacterFoodDrainMultiplier=
+
+      # ── Récolte et ressources ────────────────────────────────────────────
+      - DNL_HarvestHealthMultiplier=
+      - DNL_ResourcesRespawnPeriodMultiplier=
+      - DNL_ClampResourceHarvestDamage=
+      - DNL_ItemStackSizeMultiplier=
+
+      # ── Structures ───────────────────────────────────────────────────────
+      - DNL_PvEStructureDecayPeriodMultiplier=
+      - DNL_PvEStructureDecayDestructionPeriod=
+      - DNL_PvPStructureDecay=
+      - DNL_AllowCaveBuildingPvE=
+      - DNL_EnableExtraStructurePreventionVolumes=
+      - DNL_StructurePreventResourceRadiusMultiplier=
+      - DNL_AlwaysAllowStructurePickup=
+      - DNL_StructurePickupTimeAfterPlacement=
+      - DNL_StructurePickupHoldDuration=
+      - DNL_OverrideStructurePlatformPrevention=
+      - DNL_MaxPlatformSaddleStructureLimit=
+      - DNL_PerPlatformMaxStructuresMultiplier=
+      - DNL_PlatformSaddleBuildAreaBoundsMultiplier=
+
+      # ── Tribus et PvP ────────────────────────────────────────────────────
+      - DNL_MaxTribeLogs=
+      - DNL_TribeNameChangeCooldown=
+      - DNL_PreventTribeAlliances=
+      - DNL_PreventOfflinePvP=
+      - DNL_PreventOfflinePvPInterval=
+      - DNL_PvPDinoDecay=
+      - DNL_AllowAnyoneBabyImprintCuddle=
+
+      # ── Divers ───────────────────────────────────────────────────────────
+      - DNL_PreventSpawnAnimations=
+      - DNL_PreventDiseases=
+      - DNL_NonPermanentDiseases=
+      - DNL_ActiveMods=
+    ports:
+      # Ports conteneur = ports officiels. Pour que le serveur s'annonce
+      # correctement à Steam, garder le MÊME numéro côté hôte (jeux1=7777).
+      # Jeu
+      - "${jeux1}:7777/udp"
+      # Port "raw" (toujours jeu+1, non configurable séparément)
+      - "7778:7778/udp"
+      # Requête Steam (navigateur de serveurs)
+      - "${steamQuery}:${steamQuery}/udp"
+      # RCON : toujours actif DANS le conteneur (sert à l'arrêt propre).
+      # NE PAS publier sur internet ; si besoin, ne l'ouvrir que sur le
+      # VPN / le LAN (pare-feu pfSense).
+      # - "${rcon}:${rcon}/tcp"
+    # Ressources : un serveur UE4 de ce type utilise 6 à 10 Go de RAM
+    cpus: 4
+    mem_limit: 12g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Nécessaires uniquement au script de démarrage (usermod/chown/gosu)
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
